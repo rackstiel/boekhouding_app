@@ -23,11 +23,13 @@ sheet = client.open(SHEET_NAAM).worksheet(TABBLAD_NAAM)
 # Laad bestaande data
 df = get_as_dataframe(sheet)
 if df is None or df.empty:
-    df = pd.DataFrame(columns=["Datum", "Categorie", "Waarde", "Omschrijving"])
+    df = pd.DataFrame(columns=["Datum", "Categorie", "Bedrag", "Omschrijving"])
 else:
     df["Datum"] = pd.to_datetime(df["Datum"])
     if "Omschrijving" not in df.columns:
         df["Omschrijving"] = ""  # Voeg kolom toe als die nog niet bestaat
+    if "Bedrag" not in df.columns:
+        df.rename(columns={"Waarde": "Bedrag"}, inplace=True)
 
 # ----------------------
 # STREAMLIT UI
@@ -51,17 +53,18 @@ if categorie_select == "Nieuwe categorie":
 else:
     categorie = categorie_select
 
-waarde = st.number_input("Waarde", step=1.0)
-
-# Nieuw optioneel veld
+# Nieuw optioneel veld Omschrijving boven Bedrag
 omschrijving = st.text_input("Omschrijving (optioneel)")
+
+# Bedrag veld als valuta
+bedrag = st.number_input("Bedrag (€)", step=0.01, format="€ %.2f")
 
 # Opslaan knop
 if st.button("Opslaan") and categorie:
     nieuwe_rij = {
         "Datum": pd.to_datetime(datum),
         "Categorie": categorie,
-        "Waarde": waarde,
+        "Bedrag": bedrag,
         "Omschrijving": omschrijving
     }
     df = pd.concat([df, pd.DataFrame([nieuwe_rij])], ignore_index=True)
