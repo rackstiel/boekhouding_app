@@ -27,7 +27,7 @@ if df is None or df.empty:
 else:
     df["Datum"] = pd.to_datetime(df["Datum"])
     if "Omschrijving" not in df.columns:
-        df["Omschrijving"] = ""  # Voeg kolom toe als die nog niet bestaat
+        df["Omschrijving"] = ""
     if "Bedrag" not in df.columns:
         df.rename(columns={"Waarde": "Bedrag"}, inplace=True)
 
@@ -42,19 +42,26 @@ datum = st.date_input("Datum")
 # Dropdown categorieën
 bestaande_categorieen = df["Categorie"].dropna().unique().tolist()
 bestaande_categorieen.sort()
-
 categorie_select = st.selectbox(
     "Kies een categorie (of selecteer 'Nieuwe categorie')",
     ["Nieuwe categorie"] + bestaande_categorieen
 )
-
 if categorie_select == "Nieuwe categorie":
     categorie = st.text_input("Nieuwe categorie invoeren")
 else:
     categorie = categorie_select
 
-# Nieuw optioneel veld Omschrijving boven Bedrag
-omschrijving = st.text_input("Omschrijving (optioneel)")
+# Dropdown omschrijving
+bestaande_omschrijving = df["Omschrijving"].dropna().unique().tolist()
+bestaande_omschrijving.sort()
+omschrijving_select = st.selectbox(
+    "Kies een omschrijving (of selecteer 'Nieuwe omschrijving')",
+    ["Nieuwe omschrijving"] + bestaande_omschrijving
+)
+if omschrijving_select == "Nieuwe omschrijving":
+    omschrijving = st.text_input("Nieuwe omschrijving invoeren")
+else:
+    omschrijving = omschrijving_select
 
 # Bedrag veld als valuta
 bedrag = st.number_input("Bedrag (€)", step=0.01, format="%.2f")
@@ -72,12 +79,15 @@ if st.button("Opslaan") and categorie:
     # Schrijf terug naar Google Sheet
     set_with_dataframe(sheet, df)
     
-    st.success(f"Gegevens opgeslagen! Categorie '{categorie}' toegevoegd indien nieuw.")
+    st.success(f"Gegevens opgeslagen! Categorie '{categorie}' en omschrijving '{omschrijving}' toegevoegd indien nieuw.")
 
-    # Update dropdown in huidige sessie
+    # Update dropdowns in huidige sessie
     if categorie not in bestaande_categorieen:
         bestaande_categorieen.append(categorie)
         bestaande_categorieen.sort()
+    if omschrijving not in bestaande_omschrijving:
+        bestaande_omschrijving.append(omschrijving)
+        bestaande_omschrijving.sort()
 
 # Overzicht van data
 st.subheader("Overzicht ingevoerde data")
