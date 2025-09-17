@@ -3,13 +3,12 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from gspread_dataframe import get_as_dataframe, set_with_dataframe
-import io
 
 # ----------------------
 # CONFIGURATIE
 # ----------------------
-SHEET_NAAM = "Boekhouding_Rick"  # je Google Sheet naam
-TABBLAD_NAAM = "Blad1"           # jouw tabbladnaam
+SHEET_NAAM = "Boekhouding_Rick"
+TABBLAD_NAAM = "Blad1"
 SERVICE_ACCOUNT_INFO = st.secrets["gcp_service_account"]
 
 # Maak credentials
@@ -24,9 +23,11 @@ sheet = client.open(SHEET_NAAM).worksheet(TABBLAD_NAAM)
 # Laad bestaande data
 df = get_as_dataframe(sheet)
 if df is None or df.empty:
-    df = pd.DataFrame(columns=["Datum", "Categorie", "Waarde"])
+    df = pd.DataFrame(columns=["Datum", "Categorie", "Waarde", "Omschrijving"])
 else:
     df["Datum"] = pd.to_datetime(df["Datum"])
+    if "Omschrijving" not in df.columns:
+        df["Omschrijving"] = ""  # Voeg kolom toe als die nog niet bestaat
 
 # ----------------------
 # STREAMLIT UI
@@ -52,9 +53,17 @@ else:
 
 waarde = st.number_input("Waarde", step=1.0)
 
+# Nieuw optioneel veld
+omschrijving = st.text_input("Omschrijving (optioneel)")
+
 # Opslaan knop
 if st.button("Opslaan") and categorie:
-    nieuwe_rij = {"Datum": pd.to_datetime(datum), "Categorie": categorie, "Waarde": waarde}
+    nieuwe_rij = {
+        "Datum": pd.to_datetime(datum),
+        "Categorie": categorie,
+        "Waarde": waarde,
+        "Omschrijving": omschrijving
+    }
     df = pd.concat([df, pd.DataFrame([nieuwe_rij])], ignore_index=True)
     
     # Schrijf terug naar Google Sheet
@@ -74,13 +83,3 @@ if df.empty:
 else:
     df_sorted = df.sort_values(by="Datum", ascending=False)
     st.dataframe(df_sorted)
-
-# Optioneel: download knop
-excel_buffer = io.BytesIO()
-df.to_excel(excel_buffer, index=False)
-st.download_button(
-    label="Download Excel",
-    data=excel_buffer,
-    file_name="Boekhouding_Rick.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
