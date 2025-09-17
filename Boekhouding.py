@@ -31,7 +31,7 @@ else:
 # ----------------------
 # STREAMLIT UI
 # ----------------------
-st.title("Boekhouding Rick")
+st.title("Boekhouding")
 
 # Datum invoer
 datum = st.date_input("Datum")
