@@ -57,7 +57,7 @@ else:
 omschrijving = st.text_input("Omschrijving (optioneel)")
 
 # Bedrag veld als valuta
-bedrag = st.number_input("Bedrag (€)", step=0.01, format="€ %.2f")
+bedrag = st.number_input("Bedrag (€)", step=0.01, format="%.2f")
 
 # Opslaan knop
 if st.button("Opslaan") and categorie:
