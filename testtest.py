@@ -1,3 +1,4 @@
 import streamlit as st
-import pygsheets
+import pandas as pd
+import gspread
 st.write("gspread import werkt!")
