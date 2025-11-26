@@ -11,7 +11,7 @@ SHEET_NAAM = "Boekhouding_Rick"
 TABBLAD_NAAM = "Blad1"
 SERVICE_ACCOUNT_INFO = st.secrets["gcp_service_account"]
 
-# Maak credentials
+# Google credentials
 scope = ["https://spreadsheets.google.com/feeds",
          "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=scope)
@@ -20,7 +20,7 @@ client = gspread.authorize(creds)
 # Open Google Sheet
 sheet = client.open(SHEET_NAAM).worksheet(TABBLAD_NAAM)
 
-# Laad bestaande data
+# Data laden
 df = get_as_dataframe(sheet)
 if df is None or df.empty:
     df = pd.DataFrame(columns=["Datum", "Categorie", "Bedrag", "Omschrijving"])
@@ -32,39 +32,39 @@ else:
         df.rename(columns={"Waarde": "Bedrag"}, inplace=True)
 
 # ----------------------
-# STREAMLIT UI
-# ----------------------
-st.title("Boekhouding")
-
-# ----------------------
-# SESSION STATE INITIALISEREN (voor reset)
+# SESSION STATE INIT
 # ----------------------
 if "datum" not in st.session_state:
-    st.session_state.datum = None
+    st.session_state.datum = pd.to_datetime("today")
+
 if "categorie_select" not in st.session_state:
     st.session_state.categorie_select = "Nieuwe categorie"
+
 if "categorie_custom" not in st.session_state:
     st.session_state.categorie_custom = ""
+
 if "omschrijving_select" not in st.session_state:
     st.session_state.omschrijving_select = "Nieuwe omschrijving"
+
 if "omschrijving_custom" not in st.session_state:
     st.session_state.omschrijving_custom = ""
+
 if "bedrag" not in st.session_state:
-    st.session_state.bedrag = None
+    st.session_state.bedrag = ""
+
 if "transactietype" not in st.session_state:
     st.session_state.transactietype = "Uitgave"
 
 # ----------------------
-# INVOERVELDEN
+# STREAMLIT UI
 # ----------------------
+st.title("Boekhouding")
 
-# Datum invoer
+# Datum
 datum = st.date_input("Datum", value=st.session_state.datum, key="datum")
 
-# Dropdown categorieën
-bestaande_categorieen = df["Categorie"].dropna().unique().tolist()
-bestaande_categorieen.sort()
-
+# Categorie
+bestaande_categorieen = sorted(df["Categorie"].dropna().unique().tolist())
 categorie_select = st.selectbox(
     "Kies een categorie (of selecteer 'Nieuwe categorie')",
     ["Nieuwe categorie"] + bestaande_categorieen,
@@ -76,10 +76,8 @@ if st.session_state.categorie_select == "Nieuwe categorie":
 else:
     categorie = st.session_state.categorie_select
 
-# Dropdown omschrijving
-bestaande_omschrijving = df["Omschrijving"].dropna().unique().tolist()
-bestaande_omschrijving.sort()
-
+# Omschrijving
+bestaande_omschrijving = sorted(df["Omschrijving"].dropna().unique().tolist())
 omschrijving_select = st.selectbox(
     "Kies een omschrijving (of selecteer 'Nieuwe omschrijving')",
     ["Nieuwe omschrijving"] + bestaande_omschrijving,
@@ -91,28 +89,33 @@ if st.session_state.omschrijving_select == "Nieuwe omschrijving":
 else:
     omschrijving = st.session_state.omschrijving_select
 
-# Bedrag veld – nu LEGE standaardwaarde
-bedrag = st.number_input(
-    "Bedrag (€)",
-    step=0.01,
-    format="%.2f",
-    value=st.session_state.bedrag,
-    key="bedrag"
-)
+# Bedrag — standaard leeg
+bedrag_input = st.text_input("Bedrag (€)", value=st.session_state.bedrag, key="bedrag")
 
-# Nieuw: keuze tussen uitgave of inkomsten
+# Transactie type
 transactietype = st.radio(
     "Type transactie",
     ["Uitgave", "Inkomsten"],
-    index=0,
     key="transactietype"
 )
 
 # ----------------------
-# OPSLAAN + RESET
+# OPSLAAN KNOP
 # ----------------------
-if st.button("Opslaan") and categorie:
+if st.button("Opslaan"):
 
+    # Validatie
+    if bedrag_input.strip() == "":
+        st.error("Vul een bedrag in.")
+        st.stop()
+
+    try:
+        bedrag = float(bedrag_input.replace(",", "."))
+    except:
+        st.error("Ongeldig bedrag. Gebruik alleen cijfers.")
+        st.stop()
+
+    # Uitgave → negatief
     bedrag_final = bedrag * (-1 if transactietype == "Uitgave" else 1)
 
     nieuwe_rij = {
@@ -127,13 +130,15 @@ if st.button("Opslaan") and categorie:
 
     st.success("Gegevens opgeslagen!")
 
-    # 🔄 Velden resetten
-    st.session_state.datum = None
+    # ----------------------
+    # Veld-reset (mag geen None zijn!)
+    # ----------------------
+    st.session_state.datum = pd.to_datetime("today")
     st.session_state.categorie_select = "Nieuwe categorie"
     st.session_state.categorie_custom = ""
     st.session_state.omschrijving_select = "Nieuwe omschrijving"
     st.session_state.omschrijving_custom = ""
-    st.session_state.bedrag = None
+    st.session_state.bedrag = ""        # leeg veld
     st.session_state.transactietype = "Uitgave"
 
     st.experimental_rerun()
@@ -145,4 +150,4 @@ st.subheader("Overzicht ingevoerde data")
 if df.empty:
     st.info("Er zijn nog geen gegevens ingevoerd.")
 else:
-    st.dataframe(df.sort_values(by="Datum", ascending=False))
+    st.dataframe(df.sort_values("Datum", ascending=False))
