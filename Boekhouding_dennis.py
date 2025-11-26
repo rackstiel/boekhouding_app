@@ -7,7 +7,7 @@ from gspread_dataframe import get_as_dataframe, set_with_dataframe
 # ----------------------
 # CONFIGURATIE
 # ----------------------
-SHEET_NAAM = "Boekhouding_Rick"
+SHEET_NAAM = "Boekhouding_Dennis"
 TABBLAD_NAAM = "Blad1"
 SERVICE_ACCOUNT_INFO = st.secrets["gcp_service_account"]
 
