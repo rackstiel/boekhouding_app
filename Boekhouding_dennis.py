@@ -50,7 +50,7 @@ if "transactietype" not in st.session_state:
 # ----------------------
 # STREAMLIT UI
 # ----------------------
-st.title("Boekhouding")
+st.title("Boekhouding Dennis Kats")
 
 # Datum invoer
 datum = st.date_input("Datum")
