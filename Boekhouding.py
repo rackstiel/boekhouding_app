@@ -66,12 +66,22 @@ else:
 # Bedrag veld als valuta
 bedrag = st.number_input("Bedrag (€)", step=0.01, format="%.2f")
 
+# Nieuw: keuze tussen uitgave of inkomsten
+transactietype = st.radio(
+    "Type transactie",
+    ["Uitgave", "Inkomsten"],
+    index=0  # standaard op uitgave
+)
+
 # Opslaan knop
 if st.button("Opslaan") and categorie:
+    # Bedrag aanpassen op basis van type
+    bedrag_final = bedrag * (-1 if transactietype == "Uitgave" else 1)
+
     nieuwe_rij = {
         "Datum": pd.to_datetime(datum),
         "Categorie": categorie,
-        "Bedrag": bedrag,
+        "Bedrag": bedrag_final,
         "Omschrijving": omschrijving
     }
     df = pd.concat([df, pd.DataFrame([nieuwe_rij])], ignore_index=True)
