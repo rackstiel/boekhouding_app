@@ -183,7 +183,7 @@ if st.session_state.pagina == 2:
         fig = teken_dartbord(focus_vak)
 
         # Centered column voor compacte weergave
-        col1, col2, col3 = st.columns([1,8,1])
+        col1, col2, col3 = st.columns([1,6,1])
         with col2:
             st.pyplot(fig, use_container_width=False)
 
