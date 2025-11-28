@@ -5,29 +5,10 @@ import numpy as np
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+import pandas as pd
 
 # ----------------------
-# CONFIGURATIE GOOGLE SHEET
-# ----------------------
-SHEET_NAAM = "Dartapp"
-TABBLAD_NAAM = "Blad1"
-SERVICE_ACCOUNT_INFO = st.secrets["gcp_service_account"]
-
-scope = ["https://spreadsheets.google.com/feeds",
-         "https://www.googleapis.com/auth/drive"]
-creds = Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=scope)
-client = gspread.authorize(creds)
-sheet = client.open(SHEET_NAAM).worksheet(TABBLAD_NAAM)
-
-# ----------------------
-# FUNCTIE OM DATA OP TE SLAAN
-# ----------------------
-def sla_data_op(naam, vak, aantal_pijlen, timestamp):
-    sheet.append_row([naam, timestamp, vak, aantal_pijlen])
-    #st.success(f"Gegevens voor vak '{get_focus_display_name(vak)}' opgeslagen!")
-
-# ----------------------
-# Dartbord instellingen
+# Dartbord instellingen en hulpfuncties
 # ----------------------
 ring_radii = {
     "Double": (9.5, 10),
@@ -57,70 +38,118 @@ def get_type(vak):
     else:
         raise ValueError(f"Onbekend vak: {vak}")
 
-def kleur(vak, focus_vak):
-    return (1,0,0) if vak == focus_vak else (0.9,0.9,0.9)
-
 def get_focus_display_name(vak):
-    if vak in ["Bullseye", "Outer Bull"]:
-        return vak
-    vak_parts = vak.split()
-    type_vak = vak_parts[0]
-    if type_vak == "Single":
-        if vak_parts[-1].isdigit():
-            nummer_in_vak = int(vak_parts[-1])
-            position = ""
-        else:
-            nummer_in_vak = int(vak_parts[-2])
-            position = vak_parts[-1]
-        echte_nummer = dartbord_volgorde[nummer_in_vak - 1]
-        return f"{type_vak} {position} ({echte_nummer})".strip()
-    else:
-        nummer_in_vak = int(vak_parts[1])
-        echte_nummer = dartbord_volgorde[nummer_in_vak - 1]
-        return f"{type_vak} {echte_nummer}"
+    return vak
 
-def teken_dartbord(focus_vak):
-    sectoren = range(1, 21)
+# ----------------------
+# Functie voor dartbord met accent
+# ----------------------
+def teken_dartbord(focus_vak=None):
+    sectoren = range(20)
     fig, ax = plt.subplots(figsize=(8,8), subplot_kw={'polar': True})
     ax.set_theta_offset(np.pi/2)
     ax.set_theta_direction(-1)
     ax.set_ylim(0, 10)
     theta_width = 2*np.pi / 20
+
+    # kleurenpatroon per sector
+    kleuren_pattern = [
+        [(1,0,0), (0,0,0), (1,0,0), (0,0,0)],       # rood-zwart
+        [(0,0.5,0), (0.96,0.96,0.86), (0,0.5,0), (0.96,0.96,0.86)]  # groen-beige
+    ]
+
+    # Sectoren & ringen
     for i, s in enumerate(sectoren):
+        # ✔️ Gebruik nu het ECHTE dartnummer
+        nummer = dartbord_volgorde[i]
+
         vakken_in_sector = [
-            f"Double {s}",
-            f"Single {s} boven",
-            f"Triple {s}",
-            f"Single {s} onder"
+            f"Double {nummer}",
+            f"Single {nummer} boven",
+            f"Triple {nummer}",
+            f"Single {nummer} onder"
         ]
-        for vak in vakken_in_sector:
+
+        pattern = kleuren_pattern[i % 2]
+
+        for j, vak in enumerate(vakken_in_sector):
             vak_type = get_type(vak)
             r_start, r_end = ring_radii[vak_type]
+
+            # Accent: blauw + goud
+            if vak == focus_vak:
+                color = (0,0,1)  # blauw
+                edge = 'gold'
+                lw = 2
+            else:
+                color = pattern[j]
+                edge = 'black'
+                lw = 0.5
+
             ax.bar(
                 i*theta_width,
                 r_end - r_start,
                 width=theta_width*0.95,
                 bottom=r_start,
-                color=kleur(vak, focus_vak),
-                edgecolor='black',
-                linewidth=0.5
+                color=color,
+                edgecolor=edge,
+                linewidth=lw
             )
+
+    # ✔️ Bulls (bull & single bull blauw bij focus)
     for vak, radius in [("Outer Bull", ring_radii["Outer Bull"]), ("Bullseye", ring_radii["Bullseye"])]:
         r_start, r_end = radius
-        circle = plt.Circle((0,0), r_end, transform=ax.transData._b, color=kleur(vak, focus_vak), ec='black')
+
+        # Normale kleuren (groen / rood)
+        normale_kleur = (0,1,0) if vak == "Outer Bull" else (1,0,0)
+
+        if vak == focus_vak:
+            circle_color = (0,0,1)   # blauw
+            edge_color = 'gold'
+            lw = 2
+        else:
+            circle_color = normale_kleur
+            edge_color = 'black'
+            lw = 0.5
+
+        circle = plt.Circle(
+            (0,0),
+            r_end,
+            transform=ax.transData._b,
+            color=circle_color,
+            ec=edge_color,
+            linewidth=lw
+        )
         ax.add_artist(circle)
+
+    # Nummering rondom bord
     for i, nummer in enumerate(dartbord_volgorde):
-        theta = i * theta_width + theta_width/2 - (2*np.pi / 40)
-        ax.text(theta, 10.7, str(nummer), ha='center', va='center', fontsize=12, fontweight='bold')
+        theta = (i * theta_width) + (theta_width / 2) - (2*np.pi / 40)
+        ax.text(theta, 10.7, str(nummer), ha='center', va='center', fontsize=14, fontweight='bold')
+
     ax.set_xticks([])
     ax.set_yticks([])
     plt.title(get_focus_display_name(focus_vak), pad=30, fontsize=18, fontweight='bold')
     return fig
 
 # ----------------------
-# STREAMLIT APP
+# CONFIGURATIE GOOGLE SHEET
 # ----------------------
+SHEET_NAAM = "Dartapp"
+TABBLAD_NAAM = "Blad1"
+SERVICE_ACCOUNT_INFO = st.secrets["gcp_service_account"]
 
+scope = ["https://spreadsheets.google.com/feeds",
+         "https://www.googleapis.com/auth/drive"]
+creds = Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=scope)
+client = gspread.authorize(creds)
+sheet = client.open(SHEET_NAAM).worksheet(TABBLAD_NAAM)
+
+# ----------------------
+# FUNCTIE OM DATA OP TE SLAAN
+# ----------------------
+def sla_data_op(naam, vak, aantal_pijlen, timestamp):
+    sheet.append_row([naam, timestamp, vak, aantal_pijlen])
 
 # ----------------------
 # SESSION STATE INIT
@@ -130,14 +159,14 @@ for key in ['pagina', 'naam', 'vakken', 'index', 'pijlen', 'timestamp', 'dropdow
         st.session_state[key] = None if key != 'pijlen' else {}
 
 if 'ingevulde_waarden' not in st.session_state:
-    st.session_state.ingevulde_waarden = []  # lijst van dicts: [{"vak": ..., "waarde": ...}, ...]
+    st.session_state.ingevulde_waarden = []
 
 # ----------------------
 # Pagina 1: Naam dropdown + tekst
 # ----------------------
 if st.session_state.pagina == 1 or st.session_state.pagina is None:
     try:
-        alle_rows = sheet.get_all_values()[1:]  # skip header
+        alle_rows = sheet.get_all_values()[1:]
         bestaande_namen = sorted(list(set(row[0] for row in alle_rows if row[0])))
     except:
         bestaande_namen = []
@@ -168,14 +197,13 @@ if st.session_state.pagina == 1 or st.session_state.pagina is None:
         st.session_state.naam = naam
         st.session_state.timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # --------- Vakken instellen ----------
         aantal_totaal_vakken = 5
         alle_vakken = []
         for n in range(1,21):
             alle_vakken.extend([f"Double {n}", f"Single {n} boven", f"Triple {n}", f"Single {n} onder"])
         alle_vakken.extend(["Outer Bull","Bullseye"])
 
-        verplichte_vakken = ["Triple 1", random.choice(["Bullseye","Outer Bull"])]
+        verplichte_vakken = ["Triple 20", random.choice(["Bullseye","Outer Bull"])]
         overige_vakken = list(set(alle_vakken) - set(verplichte_vakken))
         aantal_overige = aantal_totaal_vakken - len(verplichte_vakken)
         random_vakken = random.sample(overige_vakken, aantal_overige)
@@ -188,93 +216,57 @@ if st.session_state.pagina == 1 or st.session_state.pagina is None:
 
     st.button("Start", on_click=start_app)
 
-    # ---- DATA OPHALEN ----
-    rows = sheet.get_all_values()[1:]  # skip header
-    # Structuur: [naam, timestamp, vak, aantal]
-
-    import pandas as pd
-
-    # ---------------------------
-    # TABEL 1 — Beste totaalscore per persoon
-    # ---------------------------
+    # ----------------------
+    # Overzicht beste totaalscore
+    # ----------------------
     st.subheader("🎯 Beste totaalscore per persoon")
-
-    totals = {}  # naam → lijst totalen per sessie
-
-    for r in rows:
+    totals = {}
+    for r in alle_rows:
         naam, ts, vak, aantal = r
         aantal = int(aantal)
-
-        if naam not in totals:
-            totals[naam] = {}
-
-        # Voeg sessie toe
-        if ts not in totals[naam]:
-            totals[naam][ts] = 0
-
+        totals.setdefault(naam, {}).setdefault(ts, 0)
         totals[naam][ts] += aantal
 
-    # Minimale score per persoon bepalen
-    min_scores = []
-    for naam, sessies in totals.items():
-        beste_score = min(sessies.values())
-        min_scores.append([naam, beste_score])
-
+    min_scores = [[naam, min(sessies.values())] for naam, sessies in totals.items()]
     df_totals = pd.DataFrame(min_scores, columns=["Naam", "Totaal worpen (minimaal)"])
     df_totals = df_totals.sort_values("Totaal worpen (minimaal)", ascending=True)
     df_totals.insert(0, "Positie", range(1, len(df_totals) + 1))
     st.dataframe(df_totals, use_container_width=True, hide_index=True)
 
-    # Knop om direct naar resultaten/statistieken te gaan
     def ga_naar_statistieken():
         st.session_state.pagina = 3
 
     st.button("Naar statistieken", on_click=ga_naar_statistieken)
 
 # ----------------------
-# Pagina 2: Step-by-step vakjes met number_input + knoppen
+# Pagina 2: Step-by-step vakjes
 # ----------------------
 if st.session_state.pagina == 2:
     idx = st.session_state.index
     vakken = st.session_state.vakken
 
-    # Controleer of alle vakken al voorbij zijn
     if idx >= len(vakken):
         st.session_state.pagina = 2.5
     else:
         focus_vak = vakken[idx]
         fig = teken_dartbord(focus_vak)
-
         col1, col2, col3 = st.columns([1,6,1])
         with col2:
             st.pyplot(fig, use_container_width=False)
 
-        # ----------------------
-        # Init pijlen_data en widget state
-        # ----------------------
         if "pijlen_data" not in st.session_state:
             st.session_state.pijlen_data = {}
 
         if idx not in st.session_state.pijlen_data:
-            if len(st.session_state.ingevulde_waarden) > idx:
-                st.session_state.pijlen_data[idx] = st.session_state.ingevulde_waarden[idx]['waarde']
-            else:
-                st.session_state.pijlen_data[idx] = 1
+            st.session_state.pijlen_data[idx] = st.session_state.ingevulde_waarden[idx]['waarde'] if len(st.session_state.ingevulde_waarden) > idx else 1
 
-        # Zorg dat de widgetkey bestaat zonder conflict
         widget_key = f"number_{idx}"
         if widget_key not in st.session_state:
             st.session_state[widget_key] = st.session_state.pijlen_data[idx]
 
-        # ----------------------
-        # Callback voor number_input
-        # ----------------------
         def update_pijlen(i):
             st.session_state.pijlen_data[i] = st.session_state[f"number_{i}"]
 
-        # ----------------------
-        # Number input
-        # ----------------------
         st.number_input(
             f"Aantal pijlen op {get_focus_display_name(focus_vak)}:",
             min_value=1,
@@ -284,55 +276,35 @@ if st.session_state.pagina == 2:
             args=(idx,)
         )
 
-        # ----------------------
-        # +1 / +2 / +3 knoppen
-        # ----------------------
         def plus(i, delta):
-            # Verhoog de widgetwaarde
             st.session_state[f"number_{i}"] += delta
-            # Synchroniseer pijlen_data
             st.session_state.pijlen_data[i] = st.session_state[f"number_{i}"]
 
         btn_col1, btn_col2, btn_col3 = st.columns(3)
         with btn_col1:
-            st.button("+1", on_click=plus, args=(idx, 1), key=f"btn1_{idx}")
+            st.button("+1", on_click=plus, args=(idx,1), key=f"btn1_{idx}")
         with btn_col2:
-            st.button("+2", on_click=plus, args=(idx, 2), key=f"btn2_{idx}")
+            st.button("+2", on_click=plus, args=(idx,2), key=f"btn2_{idx}")
         with btn_col3:
-            st.button("+3", on_click=plus, args=(idx, 3), key=f"btn3_{idx}")
+            st.button("+3", on_click=plus, args=(idx,3), key=f"btn3_{idx}")
 
-        # ----------------------
-        # Volgende-knop
-        # ----------------------
         def volgende_vak():
             waarde = st.session_state[f"number_{idx}"]
             if len(st.session_state.ingevulde_waarden) > idx:
                 st.session_state.ingevulde_waarden[idx]['waarde'] = waarde
             else:
-                st.session_state.ingevulde_waarden.append({
-                    "vak": focus_vak,
-                    "waarde": waarde
-                })
+                st.session_state.ingevulde_waarden.append({"vak": focus_vak, "waarde": waarde})
             st.session_state.index += 1
 
-        # ----------------------
-        # Vorige-knop
-        # ----------------------
         def vorige_vak():
             waarde = st.session_state[f"number_{idx}"]
             if len(st.session_state.ingevulde_waarden) > idx:
                 st.session_state.ingevulde_waarden[idx]['waarde'] = waarde
             else:
-                st.session_state.ingevulde_waarden.append({
-                    "vak": focus_vak,
-                    "waarde": waarde
-                })
+                st.session_state.ingevulde_waarden.append({"vak": focus_vak, "waarde": waarde})
             if st.session_state.index > 0:
                 st.session_state.index -= 1
 
-        # ----------------------
-        # Knoppen onderaan
-        # ----------------------
         prev_col, next_col = st.columns(2)
         with prev_col:
             if st.session_state.index == 0:
@@ -343,42 +315,22 @@ if st.session_state.pagina == 2:
             st.button("Volgende", on_click=volgende_vak)
 
 # ----------------------
-# Pagina 2.5: Overzicht & aanpasbare worpen
+# Pagina 2.5: Overzicht
 # ----------------------
 if st.session_state.pagina == 2.5:
     st.header("📝 Overzicht van je ingevoerde worpen")
-
-    import pandas as pd
-
-    # Number inputs voor aanpassen
     for idx, entry in enumerate(st.session_state.ingevulde_waarden):
         focus_vak = entry['vak']
-
         key_input = f"pijlen_{idx}_aanpassen"
-
-        # Initialiseer de waarde als key nog niet bestaat
         if key_input not in st.session_state:
-            # Gebruik pijlen_data als beschikbaar, anders de eerder ingevoerde waarde
             st.session_state[key_input] = st.session_state.pijlen_data.get(idx, entry['waarde'])
-
-        # Number input tonen
-        st.number_input(
-            f"{get_focus_display_name(focus_vak)}:",
-            min_value=1,
-            step=1,
-            key=key_input
-        )
-
-        # Sync naar pijlen_data
+        st.number_input(f"{get_focus_display_name(focus_vak)}:", min_value=1, step=1, key=key_input)
         st.session_state.pijlen_data[idx] = st.session_state[key_input]
 
-    # Knop om naar resultaten te gaan en data op te slaan
     def bevestig_worpen():
         for idx, entry in enumerate(st.session_state.ingevulde_waarden):
-            # Opslaan de actuele waarde
             entry['waarde'] = st.session_state.pijlen_data[idx]
             sla_data_op(st.session_state.naam, entry['vak'], entry['waarde'], st.session_state.timestamp)
-
         st.session_state.pagina = 3
 
     st.button("Versturen", on_click=bevestig_worpen)
@@ -387,27 +339,18 @@ if st.session_state.pagina == 2.5:
 # Pagina 3: Resultaten & Statistieken
 # ----------------------
 if st.session_state.pagina == 3:
-        # Knop om terug te gaan naar startpagina
-    def terug_naar_start(): 
+    def terug_naar_start():
         st.session_state.pagina = 1
 
     st.button("Terug naar startpagina", on_click=terug_naar_start)
-
     st.header("📊 Resultaten & Statistieken")
 
     rows = sheet.get_all_values()[1:]
-
-    import pandas as pd    
-
-    # ---- TABEL 1: Beste totaalscore per persoon
     totals = {}
     for r in rows:
         naam, ts, vak, aantal = r
         aantal = int(aantal)
-        if naam not in totals:
-            totals[naam] = {}
-        if ts not in totals[naam]:
-            totals[naam][ts] = 0
+        totals.setdefault(naam, {}).setdefault(ts, 0)
         totals[naam][ts] += aantal
 
     min_scores = [[naam, min(sessies.values())] for naam, sessies in totals.items()]
@@ -416,7 +359,6 @@ if st.session_state.pagina == 3:
     df_totals.insert(0, "Positie", range(1, len(df_totals)+1))
     st.dataframe(df_totals, use_container_width=True, hide_index=True)
 
-    # ---- Dropdown speler voor persoonlijke statistieken
     alle_namen = sorted(list(set(r[0] for r in rows if r[0])))
     if "gekozen_speler_stats" not in st.session_state:
         st.session_state.gekozen_speler_stats = st.session_state.naam if st.session_state.naam in alle_namen else alle_namen[0]
@@ -429,11 +371,7 @@ if st.session_state.pagina == 3:
     )
     gekozen_speler_stats = st.session_state.gekozen_speler_stats
 
-    # ---- TABEL 2: Beste prestaties per categorie (persoonlijk)
-    categorie_data = {
-        "Double": [], "Triple": [], "Single boven": [], "Single onder": [], "Outer Bull": [], "Bullseye": []
-    }
-
+    categorie_data = {"Double": [], "Triple": [], "Single boven": [], "Single onder": [], "Outer Bull": [], "Bullseye": []}
     for r in rows:
         naam, ts, vak, aantal = r
         aantal = int(aantal)
@@ -460,23 +398,17 @@ if st.session_state.pagina == 3:
             beste_rows.append([cat, beste[0], beste[1]])
         else:
             beste_rows.append([cat, "-", "-"])
-
     df_beste = pd.DataFrame(beste_rows, columns=["Categorie", "Vak", "Aantal worpen"])
     st.dataframe(df_beste, use_container_width=True, hide_index=True)
 
-    # ---- TABEL 3: Beste & slechtste worpen per vak (persoonlijk)
     vak_data = {}
     for r in rows:
         naam, ts, vak, aantal = r
         if naam != gekozen_speler_stats:
             continue
         aantal = int(aantal)
-        if vak not in vak_data:
-            vak_data[vak] = []
-        vak_data[vak].append(aantal)
+        vak_data.setdefault(vak, []).append(aantal)
 
     vak_rows = [[vak, min(aantallen), max(aantallen)] for vak, aantallen in vak_data.items()]
-    df_vakken = pd.DataFrame(
-        vak_rows, columns=["Vak", "Beste worpen (min)", "Slechtste worpen (max)"]
-    ).sort_values("Vak")
+    df_vakken = pd.DataFrame(vak_rows, columns=["Vak", "Beste worpen (min)", "Slechtste worpen (max)"]).sort_values("Vak")
     st.dataframe(df_vakken, use_container_width=True, hide_index=True)
