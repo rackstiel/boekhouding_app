@@ -128,13 +128,12 @@ st.title("Welkom bij de Dartbord App")
 for key in ['pagina', 'naam', 'vakken', 'index', 'pijlen', 'timestamp', 'dropdown_naam', 'tekst_naam']:
     if key not in st.session_state:
         st.session_state[key] = None if key != 'pijlen' else {}
-
 # ----------------------
 # Pagina 1: Naam dropdown + tekst
 # ----------------------
 if st.session_state.pagina == 1 or st.session_state.pagina is None:
     try:
-        alle_rows = sheet.get_all_values()[1:]
+        alle_rows = sheet.get_all_values()[1:]  # skip header
         bestaande_namen = sorted(list(set(row[0] for row in alle_rows if row[0])))
     except:
         bestaande_namen = []
@@ -145,7 +144,7 @@ if st.session_state.pagina == 1 or st.session_state.pagina is None:
         st.session_state.tekst_naam = ""
 
     gekozen_naam = st.selectbox(
-        "Kies een bestaande naam of 'Zelf je naam invoeren':",
+        "Kies een bestaande naam of voer zelf je naam in:",
         ["Zelf je naam invoeren"] + bestaande_namen,
         index=0,
         key='dropdown_naam'
@@ -164,7 +163,7 @@ if st.session_state.pagina == 1 or st.session_state.pagina is None:
         st.session_state.timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # --------- Vakken instellen ----------
-        aantal_totaal_vakken = 20
+        aantal_totaal_vakken = 5
         alle_vakken = []
         for n in range(1,21):
             alle_vakken.extend([f"Double {n}", f"Single {n} boven", f"Triple {n}", f"Single {n} onder"])
@@ -183,6 +182,43 @@ if st.session_state.pagina == 1 or st.session_state.pagina is None:
 
     st.button("Start", on_click=start_app)
 
+    # ---- DATA OPHALEN ----
+    rows = sheet.get_all_values()[1:]  # skip header
+    # Structuur: [naam, timestamp, vak, aantal]
+
+    import pandas as pd
+
+    # ---------------------------
+    # TABEL 1 — Beste totaalscore per persoon
+    # ---------------------------
+    st.subheader("🎯 Beste totaalscore per persoon")
+
+    totals = {}  # naam → lijst totalen per sessie
+
+    for r in rows:
+        naam, ts, vak, aantal = r
+        aantal = int(aantal)
+
+        if naam not in totals:
+            totals[naam] = {}
+
+        # Voeg sessie toe
+        if ts not in totals[naam]:
+            totals[naam][ts] = 0
+
+        totals[naam][ts] += aantal
+
+    # Minimale score per persoon bepalen
+    min_scores = []
+    for naam, sessies in totals.items():
+        beste_score = min(sessies.values())
+        min_scores.append([naam, beste_score])
+
+    df_totals = pd.DataFrame(min_scores, columns=["Naam", "Totaal worpen (minimaal)"])
+    df_totals = df_totals.sort_values("Totaal worpen (minimaal)", ascending=True)
+    df_totals.insert(0, "Positie", range(1, len(df_totals) + 1))
+    st.dataframe(df_totals, use_container_width=True, hide_index=True)
+
 # ----------------------
 # Pagina 2: Step-by-step vakjes
 # ----------------------
@@ -190,6 +226,9 @@ if st.session_state.pagina == 2:
     idx = st.session_state.index
     if idx >= len(st.session_state.vakken):
         st.success("Je hebt alle vakken voltooid!")
+        st.session_state.pagina = 3  # GA DOOR NAAR RESULTATEN
+        st.rerun()
+
     else:
         focus_vak = st.session_state.vakken[idx]
         fig = teken_dartbord(focus_vak)
@@ -219,3 +258,141 @@ if st.session_state.pagina == 2:
             st.session_state.index += 1
 
         st.button("Volgende", on_click=volgende_vak)
+
+# ----------------------
+# PAGINA 3: RESULTATEN & STATISTIEKEN
+# ----------------------
+if st.session_state.pagina == 3:
+
+    st.header("📊 Resultaten & Statistieken")
+
+    # ---- DATA OPHALEN ----
+    rows = sheet.get_all_values()[1:]  # skip header
+    # Structuur: [naam, timestamp, vak, aantal]
+
+    import pandas as pd
+
+    # ---------------------------
+    # TABEL 1 — Beste totaalscore per persoon
+    # ---------------------------
+    st.subheader("🎯 Beste totaalscore per persoon")
+
+    totals = {}  # naam → lijst totalen per sessie
+
+    for r in rows:
+        naam, ts, vak, aantal = r
+        aantal = int(aantal)
+
+        if naam not in totals:
+            totals[naam] = {}
+
+        # Voeg sessie toe
+        if ts not in totals[naam]:
+            totals[naam][ts] = 0
+
+        totals[naam][ts] += aantal
+
+    # Minimale score per persoon bepalen
+    min_scores = []
+    for naam, sessies in totals.items():
+        beste_score = min(sessies.values())
+        min_scores.append([naam, beste_score])
+
+    df_totals = pd.DataFrame(min_scores, columns=["Naam", "Totaal worpen (minimaal)"])
+    df_totals = df_totals.sort_values("Totaal worpen (minimaal)", ascending=True)
+    df_totals.insert(0, "Positie", range(1, len(df_totals) + 1))
+    st.dataframe(df_totals, use_container_width=True, hide_index=True)
+
+    # ---------------------------
+    # DROPDOWN VOOR PERSOONLIJKE STATISTIEKEN
+    # ---------------------------
+    st.subheader("Filter op speler")
+    alle_namen = sorted(list(set(r[0] for r in rows if r[0])))
+
+    # Initialiseer session_state als die nog niet bestaat
+    if "gekozen_speler_stats" not in st.session_state:
+        st.session_state.gekozen_speler_stats = (
+            st.session_state.naam if st.session_state.naam in alle_namen else alle_namen[0]
+        )
+
+    # Dropdown koppelen aan session_state
+    st.session_state.gekozen_speler_stats = st.selectbox(
+        "Kies speler voor persoonlijke statistieken:",
+        alle_namen,
+        index=alle_namen.index(st.session_state.gekozen_speler_stats),
+        key="dropdown_persoon"
+    )
+
+    gekozen_speler_stats = st.session_state.gekozen_speler_stats
+
+    # ---------------------------
+    # TABEL 2 — Beste prestaties per categorie (persoonlijk)
+    # ---------------------------
+    st.subheader(f"🏆 Beste prestaties van {gekozen_speler_stats} per categorie")
+
+    categorie_data = {
+        "Double": [],
+        "Triple": [],
+        "Single boven": [],
+        "Single onder": [],
+        "Outer Bull": [],
+        "Bullseye": []
+    }
+
+    for r in rows:
+        naam, ts, vak, aantal = r
+        aantal = int(aantal)
+        if naam != gekozen_speler_stats:
+            continue
+
+        vak_l = vak.lower()
+        if "double" in vak_l and "bull" not in vak_l:
+            categorie_data["Double"].append((vak, aantal))
+        elif "triple" in vak_l:
+            categorie_data["Triple"].append((vak, aantal))
+        elif "boven" in vak_l:
+            categorie_data["Single boven"].append((vak, aantal))
+        elif "onder" in vak_l:
+            categorie_data["Single onder"].append((vak, aantal))
+        elif "outer bull" in vak_l:
+            categorie_data["Outer Bull"].append((vak, aantal))
+        elif "bullseye" in vak_l:
+            categorie_data["Bullseye"].append((vak, aantal))
+
+    beste_rows = []
+    for cat, entries in categorie_data.items():
+        if entries:
+            beste = min(entries, key=lambda x: x[1])
+            beste_rows.append([cat, beste[0], beste[1]])
+        else:
+            beste_rows.append([cat, "-", "-"])
+
+    df_beste = pd.DataFrame(beste_rows, columns=["Categorie", "Vak", "Aantal worpen"])
+    st.dataframe(df_beste, use_container_width=True, hide_index=True)
+
+    # ---------------------------
+    # TABEL 3 — Beste & Slechtste worpen per vak (persoonlijk)
+    # ---------------------------
+    st.subheader(f"📌 Beste & slechtste worpen per vak van {gekozen_speler_stats}")
+
+    vak_data = {}  # vak → lijst worpen
+
+    for r in rows:
+        naam, ts, vak, aantal = r
+        if naam != gekozen_speler_stats:
+            continue
+        aantal = int(aantal)
+        if vak not in vak_data:
+            vak_data[vak] = []
+        vak_data[vak].append(aantal)
+
+    vak_rows = []
+    for vak, aantallen in vak_data.items():
+        vak_rows.append([vak, min(aantallen), max(aantallen)])
+
+    df_vakken = pd.DataFrame(
+        vak_rows,
+        columns=["Vak", "Beste worpen (min)", "Slechtste worpen (max)"]
+    ).sort_values("Vak")
+
+    st.dataframe(df_vakken, use_container_width=True, hide_index=True)
