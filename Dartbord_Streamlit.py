@@ -88,7 +88,7 @@ def get_focus_display_name(vak):
 
 def teken_dartbord(focus_vak):
     sectoren = range(1, 21)
-    fig, ax = plt.subplots(figsize=(8,8), subplot_kw={'polar': True})  # originele grootte
+    fig, ax = plt.subplots(figsize=(8,8), subplot_kw={'polar': True})
     ax.set_theta_offset(np.pi/2)
     ax.set_theta_direction(-1)
     ax.set_ylim(0, 10)
@@ -161,11 +161,21 @@ if st.session_state.pagina == 1:
         else:
             st.session_state.naam = st.session_state.naam_input
             st.session_state.timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # --------- AANTAL VAKKEN INSTELLEN ----------
+            aantal_totaal_vakken = 20  # <- hier kies je zelf hoeveel vakken totaal
             alle_vakken = []
             for n in range(1,21):
                 alle_vakken.extend([f"Double {n}", f"Single {n} boven", f"Triple {n}", f"Single {n} onder"])
             alle_vakken.extend(["Outer Bull","Bullseye"])
-            st.session_state.vakken = random.sample(alle_vakken, 5)
+
+            # Verplichte vakken
+            verplichte_vakken = ["Triple 1", "Bullseye"] #Hier is triple 1 de triple van het eerste vakje dus triple 20
+            overige_vakken = list(set(alle_vakken) - set(verplichte_vakken))
+            aantal_overige = aantal_totaal_vakken - len(verplichte_vakken)
+            random_vakken = random.sample(overige_vakken, aantal_overige)
+            st.session_state.vakken = verplichte_vakken + random_vakken
+
             st.session_state.index = 0
             st.session_state.pagina = 2
 
