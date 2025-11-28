@@ -231,18 +231,18 @@ if st.session_state.pagina == 1 or st.session_state.pagina is None:
 
     st.button("Naar statistieken", on_click=ga_naar_statistieken)
 
-
 # ----------------------
 # Pagina 2: Step-by-step vakjes met number_input + knoppen
 # ----------------------
 if st.session_state.pagina == 2:
     idx = st.session_state.index
+    vakken = st.session_state.vakken
 
     # Controleer of alle vakken al voorbij zijn
-    if idx >= len(st.session_state.vakken):
+    if idx >= len(vakken):
         st.session_state.pagina = 2.5
     else:
-        focus_vak = st.session_state.vakken[idx]
+        focus_vak = vakken[idx]
         fig = teken_dartbord(focus_vak)
 
         col1, col2, col3 = st.columns([1,6,1])
@@ -250,54 +250,62 @@ if st.session_state.pagina == 2:
             st.pyplot(fig, use_container_width=False)
 
         # ----------------------
-        # Init pijlen_data dict als die nog niet bestaat
+        # Init pijlen_data en widget state
         # ----------------------
         if "pijlen_data" not in st.session_state:
-            st.session_state.pijlen_data = {}  # idx → waarde
+            st.session_state.pijlen_data = {}
 
         if idx not in st.session_state.pijlen_data:
-            st.session_state.pijlen_data[idx] = 1  # default waarde
+            if len(st.session_state.ingevulde_waarden) > idx:
+                st.session_state.pijlen_data[idx] = st.session_state.ingevulde_waarden[idx]['waarde']
+            else:
+                st.session_state.pijlen_data[idx] = 1
+
+        # Zorg dat de widgetkey bestaat zonder conflict
+        widget_key = f"number_{idx}"
+        if widget_key not in st.session_state:
+            st.session_state[widget_key] = st.session_state.pijlen_data[idx]
 
         # ----------------------
-        # Number input (apart key)
+        # Callback voor number_input
+        # ----------------------
+        def update_pijlen(i):
+            st.session_state.pijlen_data[i] = st.session_state[f"number_{i}"]
+
+        # ----------------------
+        # Number input
         # ----------------------
         st.number_input(
             f"Aantal pijlen op {get_focus_display_name(focus_vak)}:",
             min_value=1,
             step=1,
-            key=f"number_{idx}",
-            value=st.session_state.pijlen_data[idx]
+            key=widget_key,
+            on_change=update_pijlen,
+            args=(idx,)
         )
 
-        # Sync number_input naar pijlen_data
-        st.session_state.pijlen_data[idx] = st.session_state[f"number_{idx}"]
-
         # ----------------------
-        # Knoppen +1, +2, +3 via callbacks
+        # +1 / +2 / +3 knoppen
         # ----------------------
-        def plus1(i):
-            st.session_state.pijlen_data[i] += 1
-
-        def plus2(i):
-            st.session_state.pijlen_data[i] += 2
-
-        def plus3(i):
-            st.session_state.pijlen_data[i] += 3
+        def plus(i, delta):
+            # Verhoog de widgetwaarde
+            st.session_state[f"number_{i}"] += delta
+            # Synchroniseer pijlen_data
+            st.session_state.pijlen_data[i] = st.session_state[f"number_{i}"]
 
         btn_col1, btn_col2, btn_col3 = st.columns(3)
         with btn_col1:
-            st.button("+1", on_click=plus1, args=(idx,), key=f"btn1_{idx}")
+            st.button("+1", on_click=plus, args=(idx, 1), key=f"btn1_{idx}")
         with btn_col2:
-            st.button("+2", on_click=plus2, args=(idx,), key=f"btn2_{idx}")
+            st.button("+2", on_click=plus, args=(idx, 2), key=f"btn2_{idx}")
         with btn_col3:
-            st.button("+3", on_click=plus3, args=(idx,), key=f"btn3_{idx}")
+            st.button("+3", on_click=plus, args=(idx, 3), key=f"btn3_{idx}")
 
         # ----------------------
         # Volgende-knop
         # ----------------------
         def volgende_vak():
-            waarde = st.session_state.pijlen_data[idx]
-            # Voeg of update ingevulde waarde in overzichtstabel
+            waarde = st.session_state[f"number_{idx}"]
             if len(st.session_state.ingevulde_waarden) > idx:
                 st.session_state.ingevulde_waarden[idx]['waarde'] = waarde
             else:
@@ -305,10 +313,34 @@ if st.session_state.pagina == 2:
                     "vak": focus_vak,
                     "waarde": waarde
                 })
-
             st.session_state.index += 1
 
-        st.button("Volgende", on_click=volgende_vak)
+        # ----------------------
+        # Vorige-knop
+        # ----------------------
+        def vorige_vak():
+            waarde = st.session_state[f"number_{idx}"]
+            if len(st.session_state.ingevulde_waarden) > idx:
+                st.session_state.ingevulde_waarden[idx]['waarde'] = waarde
+            else:
+                st.session_state.ingevulde_waarden.append({
+                    "vak": focus_vak,
+                    "waarde": waarde
+                })
+            if st.session_state.index > 0:
+                st.session_state.index -= 1
+
+        # ----------------------
+        # Knoppen onderaan
+        # ----------------------
+        prev_col, next_col = st.columns(2)
+        with prev_col:
+            if st.session_state.index == 0:
+                st.button("Vorige", disabled=True)
+            else:
+                st.button("Vorige", on_click=vorige_vak)
+        with next_col:
+            st.button("Volgende", on_click=volgende_vak)
 
 # ----------------------
 # Pagina 2.5: Overzicht & aanpasbare worpen
@@ -320,20 +352,31 @@ if st.session_state.pagina == 2.5:
 
     # Number inputs voor aanpassen
     for idx, entry in enumerate(st.session_state.ingevulde_waarden):
-        key_input = f"pijlen_{idx}_aanpassen"
-        if key_input not in st.session_state:
-            st.session_state[key_input] = entry['waarde']
+        focus_vak = entry['vak']
 
+        key_input = f"pijlen_{idx}_aanpassen"
+
+        # Initialiseer de waarde als key nog niet bestaat
+        if key_input not in st.session_state:
+            # Gebruik pijlen_data als beschikbaar, anders de eerder ingevoerde waarde
+            st.session_state[key_input] = st.session_state.pijlen_data.get(idx, entry['waarde'])
+
+        # Number input tonen
         st.number_input(
-            f"{get_focus_display_name(entry['vak'])}:",
+            f"{get_focus_display_name(focus_vak)}:",
             min_value=1,
             step=1,
             key=key_input
         )
 
+        # Sync naar pijlen_data
+        st.session_state.pijlen_data[idx] = st.session_state[key_input]
+
     # Knop om naar resultaten te gaan en data op te slaan
     def bevestig_worpen():
-        for entry in st.session_state.ingevulde_waarden:
+        for idx, entry in enumerate(st.session_state.ingevulde_waarden):
+            # Opslaan de actuele waarde
+            entry['waarde'] = st.session_state.pijlen_data[idx]
             sla_data_op(st.session_state.naam, entry['vak'], entry['waarde'], st.session_state.timestamp)
 
         st.session_state.pagina = 3
