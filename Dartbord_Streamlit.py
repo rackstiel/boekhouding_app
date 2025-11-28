@@ -163,7 +163,7 @@ if st.session_state.pagina == 1:
             st.session_state.timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             # --------- AANTAL VAKKEN INSTELLEN ----------
-            aantal_totaal_vakken = 20  # <- hier kies je zelf hoeveel vakken totaal
+            aantal_totaal_vakken = 5  # <- hier kies je zelf hoeveel vakken totaal
             alle_vakken = []
             for n in range(1,21):
                 alle_vakken.extend([f"Double {n}", f"Single {n} boven", f"Triple {n}", f"Single {n} onder"])
