@@ -23,7 +23,6 @@ sheet = client.open(SHEET_NAAM).worksheet(TABBLAD_NAAM)
 # FUNCTIE OM DATA OP TE SLAAN
 # ----------------------
 def sla_data_op(naam, vak, aantal_pijlen, timestamp):
-    """Sla naam, vak, aantal pijlen en timestamp op in Google Sheet."""
     sheet.append_row([naam, timestamp, vak, aantal_pijlen])
     st.success(f"Gegevens voor vak '{get_focus_display_name(vak)}' opgeslagen!")
 
@@ -59,29 +58,23 @@ def get_type(vak):
         raise ValueError(f"Onbekend vak: {vak}")
 
 def kleur(vak, focus_vak):
-    """Kleur rood als het focusvak is, anders grijs."""
     return (1,0,0) if vak == focus_vak else (0.9,0.9,0.9)
 
 def get_focus_display_name(vak):
-    """Return het juiste type + nummer voor titel/melding."""
     if vak in ["Bullseye", "Outer Bull"]:
         return vak
-
     vak_parts = vak.split()
     type_vak = vak_parts[0]
-
     if type_vak == "Single":
-        # Single boven/onder
         if vak_parts[-1].isdigit():
             nummer_in_vak = int(vak_parts[-1])
             position = ""
         else:
             nummer_in_vak = int(vak_parts[-2])
-            position = vak_parts[-1]  # 'boven' of 'onder'
+            position = vak_parts[-1]
         echte_nummer = dartbord_volgorde[nummer_in_vak - 1]
         return f"{type_vak} {position} ({echte_nummer})".strip()
     else:
-        # Double of Triple
         nummer_in_vak = int(vak_parts[1])
         echte_nummer = dartbord_volgorde[nummer_in_vak - 1]
         return f"{type_vak} {echte_nummer}"
@@ -93,7 +86,6 @@ def teken_dartbord(focus_vak):
     ax.set_theta_direction(-1)
     ax.set_ylim(0, 10)
     theta_width = 2*np.pi / 20
-
     for i, s in enumerate(sectoren):
         vakken_in_sector = [
             f"Double {s}",
@@ -113,16 +105,13 @@ def teken_dartbord(focus_vak):
                 edgecolor='black',
                 linewidth=0.5
             )
-
     for vak, radius in [("Outer Bull", ring_radii["Outer Bull"]), ("Bullseye", ring_radii["Bullseye"])]:
         r_start, r_end = radius
         circle = plt.Circle((0,0), r_end, transform=ax.transData._b, color=kleur(vak, focus_vak), ec='black')
         ax.add_artist(circle)
-
     for i, nummer in enumerate(dartbord_volgorde):
         theta = i * theta_width + theta_width/2 - (2*np.pi / 40)
         ax.text(theta, 10.7, str(nummer), ha='center', va='center', fontsize=12, fontweight='bold')
-
     ax.set_xticks([])
     ax.set_yticks([])
     plt.title(get_focus_display_name(focus_vak), pad=30, fontsize=18, fontweight='bold')
@@ -136,48 +125,61 @@ st.title("Welkom bij de Dartbord App")
 # ----------------------
 # SESSION STATE INIT
 # ----------------------
-if 'pagina' not in st.session_state:
-    st.session_state.pagina = 1
-if 'naam' not in st.session_state:
-    st.session_state.naam = ""
-if 'vakken' not in st.session_state:
-    st.session_state.vakken = []
-if 'index' not in st.session_state:
-    st.session_state.index = 0
-if 'pijlen' not in st.session_state:
-    st.session_state.pijlen = {}
-if 'timestamp' not in st.session_state:
-    st.session_state.timestamp = None
+for key in ['pagina', 'naam', 'vakken', 'index', 'pijlen', 'timestamp', 'dropdown_naam', 'tekst_naam']:
+    if key not in st.session_state:
+        st.session_state[key] = None if key != 'pijlen' else {}
 
 # ----------------------
-# Pagina 1: Naam invoer
+# Pagina 1: Naam dropdown + tekst
 # ----------------------
-if st.session_state.pagina == 1:
-    st.text_input("Voer je naam in:", key="naam_input")
+if st.session_state.pagina == 1 or st.session_state.pagina is None:
+    try:
+        alle_rows = sheet.get_all_values()[1:]
+        bestaande_namen = sorted(list(set(row[0] for row in alle_rows if row[0])))
+    except:
+        bestaande_namen = []
+
+    if not st.session_state.dropdown_naam:
+        st.session_state.dropdown_naam = "Zelf je naam invoeren"
+    if st.session_state.tekst_naam is None:
+        st.session_state.tekst_naam = ""
+
+    gekozen_naam = st.selectbox(
+        "Kies een bestaande naam of 'Zelf je naam invoeren':",
+        ["Zelf je naam invoeren"] + bestaande_namen,
+        index=0,
+        key='dropdown_naam'
+    )
+
+    if gekozen_naam == "Zelf je naam invoeren":
+        st.text_input("Voer je naam in:", key="tekst_naam")
 
     def start_app():
-        if not st.session_state.naam_input:
-            st.warning("Vul een naam in.")
-        else:
-            st.session_state.naam = st.session_state.naam_input
-            st.session_state.timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        naam = st.session_state.tekst_naam if gekozen_naam == "Zelf je naam invoeren" else gekozen_naam
+        if not naam.strip():
+            st.warning("Vul een naam in of selecteer een bestaande naam.")
+            return
 
-            # --------- AANTAL VAKKEN INSTELLEN ----------
-            aantal_totaal_vakken = 5  # <- hier kies je zelf hoeveel vakken totaal
-            alle_vakken = []
-            for n in range(1,21):
-                alle_vakken.extend([f"Double {n}", f"Single {n} boven", f"Triple {n}", f"Single {n} onder"])
-            alle_vakken.extend(["Outer Bull","Bullseye"])
+        st.session_state.naam = naam
+        st.session_state.timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            # Verplichte vakken
-            verplichte_vakken = ["Triple 1", "Bullseye"] #Hier is triple 1 de triple van het eerste vakje dus triple 20
-            overige_vakken = list(set(alle_vakken) - set(verplichte_vakken))
-            aantal_overige = aantal_totaal_vakken - len(verplichte_vakken)
-            random_vakken = random.sample(overige_vakken, aantal_overige)
-            st.session_state.vakken = verplichte_vakken + random_vakken
+        # --------- Vakken instellen ----------
+        aantal_totaal_vakken = 5
+        alle_vakken = []
+        for n in range(1,21):
+            alle_vakken.extend([f"Double {n}", f"Single {n} boven", f"Triple {n}", f"Single {n} onder"])
+        alle_vakken.extend(["Outer Bull","Bullseye"])
 
-            st.session_state.index = 0
-            st.session_state.pagina = 2
+        verplichte_vakken = ["Triple 1", random.choice(["Bullseye","Outer Bull"])]
+        overige_vakken = list(set(alle_vakken) - set(verplichte_vakken))
+        aantal_overige = aantal_totaal_vakken - len(verplichte_vakken)
+        random_vakken = random.sample(overige_vakken, aantal_overige)
+
+        st.session_state.vakken = verplichte_vakken + random_vakken
+        random.shuffle(st.session_state.vakken)
+
+        st.session_state.index = 0
+        st.session_state.pagina = 2
 
     st.button("Start", on_click=start_app)
 
@@ -192,12 +194,10 @@ if st.session_state.pagina == 2:
         focus_vak = st.session_state.vakken[idx]
         fig = teken_dartbord(focus_vak)
 
-        # Centered column voor compacte weergave
         col1, col2, col3 = st.columns([1,6,1])
         with col2:
             st.pyplot(fig, use_container_width=False)
 
-        # Number input (min 1)
         key_input = f"aantal_{idx}"
         if key_input not in st.session_state.pijlen:
             st.session_state.pijlen[key_input] = 1
@@ -209,7 +209,6 @@ if st.session_state.pagina == 2:
             value=st.session_state.pijlen[key_input]
         )
 
-        # Button callback
         def volgende_vak():
             aantal_widget = st.session_state[key_input]
             if aantal_widget <= 0:
