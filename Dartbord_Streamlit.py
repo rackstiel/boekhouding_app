@@ -24,7 +24,7 @@ sheet = client.open(SHEET_NAAM).worksheet(TABBLAD_NAAM)
 # ----------------------
 def sla_data_op(naam, vak, aantal_pijlen, timestamp):
     sheet.append_row([naam, timestamp, vak, aantal_pijlen])
-    st.success(f"Gegevens voor vak '{get_focus_display_name(vak)}' opgeslagen!")
+    #st.success(f"Gegevens voor vak '{get_focus_display_name(vak)}' opgeslagen!")
 
 # ----------------------
 # Dartbord instellingen
@@ -120,7 +120,7 @@ def teken_dartbord(focus_vak):
 # ----------------------
 # STREAMLIT APP
 # ----------------------
-st.title("Welkom bij de Dartbord App")
+
 
 # ----------------------
 # SESSION STATE INIT
@@ -141,6 +141,8 @@ if st.session_state.pagina == 1 or st.session_state.pagina is None:
         bestaande_namen = sorted(list(set(row[0] for row in alle_rows if row[0])))
     except:
         bestaande_namen = []
+
+    st.title("Welkom bij de Dartbord App")
 
     if not st.session_state.dropdown_naam:
         st.session_state.dropdown_naam = "Zelf je naam invoeren"
@@ -222,8 +224,16 @@ if st.session_state.pagina == 1 or st.session_state.pagina is None:
     df_totals = df_totals.sort_values("Totaal worpen (minimaal)", ascending=True)
     df_totals.insert(0, "Positie", range(1, len(df_totals) + 1))
     st.dataframe(df_totals, use_container_width=True, hide_index=True)
+
+    # Knop om direct naar resultaten/statistieken te gaan
+    def ga_naar_statistieken():
+        st.session_state.pagina = 3
+
+    st.button("Naar statistieken", on_click=ga_naar_statistieken)
+
+
 # ----------------------
-# Pagina 2: Step-by-step vakjes
+# Pagina 2: Step-by-step vakjes met number_input + knoppen
 # ----------------------
 if st.session_state.pagina == 2:
     idx = st.session_state.index
@@ -231,7 +241,6 @@ if st.session_state.pagina == 2:
     # Controleer of alle vakken al voorbij zijn
     if idx >= len(st.session_state.vakken):
         st.session_state.pagina = 2.5
-        #st.rerun()
     else:
         focus_vak = st.session_state.vakken[idx]
         fig = teken_dartbord(focus_vak)
@@ -240,32 +249,64 @@ if st.session_state.pagina == 2:
         with col2:
             st.pyplot(fig, use_container_width=False)
 
-        # Maak unieke key voor number_input
-        key_input = f"pijlen_{idx}"
-        if key_input not in st.session_state:
-            st.session_state[key_input] = 1  # default waarde
+        # ----------------------
+        # Init pijlen_data dict als die nog niet bestaat
+        # ----------------------
+        if "pijlen_data" not in st.session_state:
+            st.session_state.pijlen_data = {}  # idx → waarde
 
-        # Number input voor huidige vak
+        if idx not in st.session_state.pijlen_data:
+            st.session_state.pijlen_data[idx] = 1  # default waarde
+
+        # ----------------------
+        # Number input (apart key)
+        # ----------------------
         st.number_input(
             f"Aantal pijlen op {get_focus_display_name(focus_vak)}:",
             min_value=1,
             step=1,
-            key=key_input
+            key=f"number_{idx}",
+            value=st.session_state.pijlen_data[idx]
         )
 
-        # Volgende-knop functie
+        # Sync number_input naar pijlen_data
+        st.session_state.pijlen_data[idx] = st.session_state[f"number_{idx}"]
+
+        # ----------------------
+        # Knoppen +1, +2, +3 via callbacks
+        # ----------------------
+        def plus1(i):
+            st.session_state.pijlen_data[i] += 1
+
+        def plus2(i):
+            st.session_state.pijlen_data[i] += 2
+
+        def plus3(i):
+            st.session_state.pijlen_data[i] += 3
+
+        btn_col1, btn_col2, btn_col3 = st.columns(3)
+        with btn_col1:
+            st.button("+1", on_click=plus1, args=(idx,), key=f"btn1_{idx}")
+        with btn_col2:
+            st.button("+2", on_click=plus2, args=(idx,), key=f"btn2_{idx}")
+        with btn_col3:
+            st.button("+3", on_click=plus3, args=(idx,), key=f"btn3_{idx}")
+
+        # ----------------------
+        # Volgende-knop
+        # ----------------------
         def volgende_vak():
+            waarde = st.session_state.pijlen_data[idx]
             # Voeg of update ingevulde waarde in overzichtstabel
             if len(st.session_state.ingevulde_waarden) > idx:
-                st.session_state.ingevulde_waarden[idx]['waarde'] = st.session_state[key_input]
+                st.session_state.ingevulde_waarden[idx]['waarde'] = waarde
             else:
                 st.session_state.ingevulde_waarden.append({
                     "vak": focus_vak,
-                    "waarde": st.session_state[key_input]
+                    "waarde": waarde
                 })
 
             st.session_state.index += 1
-            #st.rerun()
 
         st.button("Volgende", on_click=volgende_vak)
 
@@ -290,17 +331,12 @@ if st.session_state.pagina == 2.5:
             key=key_input
         )
 
-        # Update overzichtstabel automatisch
-        st.session_state.ingevulde_waarden[idx]['waarde'] = st.session_state[key_input]
-
     # Knop om naar resultaten te gaan en data op te slaan
     def bevestig_worpen():
         for entry in st.session_state.ingevulde_waarden:
             sla_data_op(st.session_state.naam, entry['vak'], entry['waarde'], st.session_state.timestamp)
 
         st.session_state.pagina = 3
-        st.success("Worpen opgeslagen! Ga naar de resultaten.")
-        #st.rerun()
 
     st.button("Versturen", on_click=bevestig_worpen)
 
@@ -308,6 +344,12 @@ if st.session_state.pagina == 2.5:
 # Pagina 3: Resultaten & Statistieken
 # ----------------------
 if st.session_state.pagina == 3:
+        # Knop om terug te gaan naar startpagina
+    def terug_naar_start(): 
+        st.session_state.pagina = 1
+
+    st.button("Terug naar startpagina", on_click=terug_naar_start)
+
     st.header("📊 Resultaten & Statistieken")
 
     rows = sheet.get_all_values()[1:]
