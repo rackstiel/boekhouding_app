@@ -366,19 +366,26 @@ if st.session_state.pagina == 3:
     st.header("📊 Resultaten & Statistieken")
 
     rows = sheet.get_all_values()[1:]
-    totals = {}
+
+    # --- Totale worpen per sessie ---
+    sessie_totals = {}
     for r in rows:
         naam, ts, vak, aantal = r
         aantal = int(aantal)
-        totals.setdefault(naam, {}).setdefault(ts, 0)
-        totals[naam][ts] += aantal
+        if naam not in sessie_totals:
+            sessie_totals[naam] = {}
+        if ts not in sessie_totals[naam]:
+            sessie_totals[naam][ts] = 0
+        sessie_totals[naam][ts] += aantal
 
-    min_scores = [[naam, min(sessies.values())] for naam, sessies in totals.items()]
+    # --- Algemene ranking ---
+    min_scores = [[naam, min(sessies.values())] for naam, sessies in sessie_totals.items()]
     df_totals = pd.DataFrame(min_scores, columns=["Naam", "Totaal worpen (minimaal)"])
     df_totals = df_totals.sort_values("Totaal worpen (minimaal)").reset_index(drop=True)
     df_totals.insert(0, "Positie", range(1, len(df_totals)+1))
     st.dataframe(df_totals, use_container_width=True, hide_index=True)
 
+    # --- Spelerselectie ---
     alle_namen = sorted(list(set(r[0] for r in rows if r[0])))
     if "gekozen_speler_stats" not in st.session_state:
         st.session_state.gekozen_speler_stats = st.session_state.naam if st.session_state.naam in alle_namen else alle_namen[0]
@@ -391,12 +398,14 @@ if st.session_state.pagina == 3:
     )
     gekozen_speler_stats = st.session_state.gekozen_speler_stats
 
+    # --- Beste per categorie (links) ---
     categorie_data = {"Double": [], "Triple": [], "Single boven": [], "Single onder": [], "Outer Bull": [], "Bullseye": []}
     for r in rows:
         naam, ts, vak, aantal = r
         aantal = int(aantal)
         if naam != gekozen_speler_stats:
             continue
+
         vak_l = vak.lower()
         if "double" in vak_l and "bull" not in vak_l:
             categorie_data["Double"].append((vak, aantal))
@@ -417,10 +426,30 @@ if st.session_state.pagina == 3:
             beste = min(entries, key=lambda x: x[1])
             beste_rows.append([cat, beste[0], beste[1]])
         else:
-            beste_rows.append([cat, "-", "-"])
+            beste_rows.append([cat, None, None])
     df_beste = pd.DataFrame(beste_rows, columns=["Categorie", "Vak", "Aantal worpen"])
-    st.dataframe(df_beste, use_container_width=True, hide_index=True)
 
+    # --- Top 6 totaal aantal worpen per sessie (rechts) ---
+    speler_sessies = sessie_totals.get(gekozen_speler_stats, {})
+    if speler_sessies:
+        sorted_sessies = sorted(speler_sessies.items(), key=lambda x: x[1])[:6]
+        df_top6 = pd.DataFrame({
+            "Positie": range(1, len(sorted_sessies)+1),
+            "Totaal aantal worpen": [totaal for ts, totaal in sorted_sessies]
+        })
+    else:
+        df_top6 = pd.DataFrame({"Positie": [], "Totaal aantal worpen": []})
+
+    # --- Toon tabellen naast elkaar ---
+    colL, colR = st.columns([1,1])
+    with colL:
+        st.subheader("📂 Beste per categorie")
+        st.dataframe(df_beste, use_container_width=True, hide_index=True)
+    with colR:
+        st.subheader("🏆 Top 6 beste pogingen")
+        st.dataframe(df_top6, use_container_width=True, hide_index=True)
+
+    # --- Vakken overzicht onderaan ---
     vak_data = {}
     for r in rows:
         naam, ts, vak, aantal = r
@@ -431,4 +460,85 @@ if st.session_state.pagina == 3:
 
     vak_rows = [[vak, min(aantallen), max(aantallen)] for vak, aantallen in vak_data.items()]
     df_vakken = pd.DataFrame(vak_rows, columns=["Vak", "Beste worpen (min)", "Slechtste worpen (max)"]).sort_values("Vak")
+
+    st.subheader("📌 Beste & slechtste worpen per vak")
     st.dataframe(df_vakken, use_container_width=True, hide_index=True)
+
+
+# # ----------------------
+# # Pagina 3: Resultaten & Statistieken
+# # ----------------------
+# if st.session_state.pagina == 3:
+#     def terug_naar_start():
+#         st.session_state.pagina = 1
+
+#     st.button("Terug naar startpagina", on_click=terug_naar_start)
+#     st.header("📊 Resultaten & Statistieken")
+
+#     rows = sheet.get_all_values()[1:]
+#     totals = {}
+#     for r in rows:
+#         naam, ts, vak, aantal = r
+#         aantal = int(aantal)
+#         totals.setdefault(naam, {}).setdefault(ts, 0)
+#         totals[naam][ts] += aantal
+
+#     min_scores = [[naam, min(sessies.values())] for naam, sessies in totals.items()]
+#     df_totals = pd.DataFrame(min_scores, columns=["Naam", "Totaal worpen (minimaal)"])
+#     df_totals = df_totals.sort_values("Totaal worpen (minimaal)").reset_index(drop=True)
+#     df_totals.insert(0, "Positie", range(1, len(df_totals)+1))
+#     st.dataframe(df_totals, use_container_width=True, hide_index=True)
+
+#     alle_namen = sorted(list(set(r[0] for r in rows if r[0])))
+#     if "gekozen_speler_stats" not in st.session_state:
+#         st.session_state.gekozen_speler_stats = st.session_state.naam if st.session_state.naam in alle_namen else alle_namen[0]
+
+#     st.session_state.gekozen_speler_stats = st.selectbox(
+#         "Kies speler voor persoonlijke statistieken:",
+#         alle_namen,
+#         index=alle_namen.index(st.session_state.gekozen_speler_stats),
+#         key="dropdown_persoon"
+#     )
+#     gekozen_speler_stats = st.session_state.gekozen_speler_stats
+
+#     categorie_data = {"Double": [], "Triple": [], "Single boven": [], "Single onder": [], "Outer Bull": [], "Bullseye": []}
+#     for r in rows:
+#         naam, ts, vak, aantal = r
+#         aantal = int(aantal)
+#         if naam != gekozen_speler_stats:
+#             continue
+#         vak_l = vak.lower()
+#         if "double" in vak_l and "bull" not in vak_l:
+#             categorie_data["Double"].append((vak, aantal))
+#         elif "triple" in vak_l:
+#             categorie_data["Triple"].append((vak, aantal))
+#         elif "boven" in vak_l:
+#             categorie_data["Single boven"].append((vak, aantal))
+#         elif "onder" in vak_l:
+#             categorie_data["Single onder"].append((vak, aantal))
+#         elif "outer bull" in vak_l:
+#             categorie_data["Outer Bull"].append((vak, aantal))
+#         elif "bullseye" in vak_l:
+#             categorie_data["Bullseye"].append((vak, aantal))
+
+#     beste_rows = []
+#     for cat, entries in categorie_data.items():
+#         if entries:
+#             beste = min(entries, key=lambda x: x[1])
+#             beste_rows.append([cat, beste[0], beste[1]])
+#         else:
+#             beste_rows.append([cat, "-", "-"])
+#     df_beste = pd.DataFrame(beste_rows, columns=["Categorie", "Vak", "Aantal worpen"])
+#     st.dataframe(df_beste, use_container_width=True, hide_index=True)
+
+#     vak_data = {}
+#     for r in rows:
+#         naam, ts, vak, aantal = r
+#         if naam != gekozen_speler_stats:
+#             continue
+#         aantal = int(aantal)
+#         vak_data.setdefault(vak, []).append(aantal)
+
+#     vak_rows = [[vak, min(aantallen), max(aantallen)] for vak, aantallen in vak_data.items()]
+#     df_vakken = pd.DataFrame(vak_rows, columns=["Vak", "Beste worpen (min)", "Slechtste worpen (max)"]).sort_values("Vak")
+#     st.dataframe(df_vakken, use_container_width=True, hide_index=True)
