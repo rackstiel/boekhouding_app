@@ -173,7 +173,16 @@ if st.session_state.pagina == 1 or st.session_state.pagina is None:
 
     st.title("Welkom bij de Dartbord App")
 
-    if not st.session_state.dropdown_naam:
+    st.markdown("""
+        Vul hieronder je naam in, of zoek je naam op in de dropdown.
+        Je doorloopt 20 vakken op het darbord die je moet raken. Je vult per vak in hoeveel pijlen je nodig hebt gehad om het vak te raken.
+        Aan het einde van de app krijg je een overzicht te zien van je prestaties.
+        
+        Belangrijkste spelregel: Blijf eerlijk, dat houdt de competitie leuk. 
+        Veel plezier!
+        """)
+
+    if not st.session_state.dropdown_naam:  
         st.session_state.dropdown_naam = "Zelf je naam invoeren"
     if st.session_state.tekst_naam is None:
         st.session_state.tekst_naam = ""
@@ -250,9 +259,20 @@ if st.session_state.pagina == 2:
     else:
         focus_vak = vakken[idx]
         fig = teken_dartbord(focus_vak)
-        col1, col2, col3 = st.columns([1,6,1])
-        with col2:
+        col1, col2 = st.columns([6,2])
+
+        with col1:
             st.pyplot(fig, use_container_width=False)
+
+        with col2:
+            # Totaal berekenen
+            totaal = 0
+            for entry in st.session_state.ingevulde_waarden:
+                totaal += entry.get("waarde", 0)
+
+            st.subheader("📊 Totaal")
+            st.markdown(f"**Totaal gegooide pijlen:** `{totaal}`")
+
 
         if "pijlen_data" not in st.session_state:
             st.session_state.pijlen_data = {}
