@@ -23,13 +23,15 @@ sheet = client.open(SHEET_NAAM).worksheet(TABBLAD_NAAM)
 # Laad bestaande data
 df = get_as_dataframe(sheet)
 if df is None or df.empty:
-    df = pd.DataFrame(columns=["Datum", "Categorie", "Bedrag", "Omschrijving"])
+    df = pd.DataFrame(columns=["Datum", "Categorie", "Bedrag", "Omschrijving", "Soort"])
 else:
     df["Datum"] = pd.to_datetime(df["Datum"])
     if "Omschrijving" not in df.columns:
         df["Omschrijving"] = ""
     if "Bedrag" not in df.columns:
         df.rename(columns={"Waarde": "Bedrag"}, inplace=True)
+    if "Soort" not in df.columns:   # nieuwe kolomnaam
+        df["Soort"] = ""
 
 # ----------------------
 # SESSION STATE INIT
@@ -55,6 +57,12 @@ st.title("Boekhouding")
 # Datum invoer
 datum = st.date_input("Datum")
 
+# NIEUW: Soort onder Datum
+type_last = st.radio(
+    "Is dit een vaste last of een variabele transactie?",
+    ["Vaste last", "Variabel"]
+)
+
 # Dropdown categorieën
 bestaande_categorieen = df["Categorie"].dropna().unique().tolist()
 bestaande_categorieen.sort()
@@ -74,14 +82,14 @@ bestaande_omschrijving.sort()
 omschrijving_select = st.selectbox(
     "Kies een omschrijving (of selecteer 'Nieuwe omschrijving')",
     ["Nieuwe omschrijving"] + bestaande_omschrijving,
-    key="omschrijving_select"
+    key="Omschrijving_select"
 )
-if st.session_state.omschrijving_select == "Nieuwe omschrijving":
+if st.session_state.get("Omschrijving_select") == "Nieuwe omschrijving":
     omschrijving = st.text_input("Nieuwe omschrijving invoeren", key="omschrijving_nieuw")
 else:
-    omschrijving = st.session_state.omschrijving_select
+    omschrijving = st.session_state.get("Omschrijving_select")
 
-# Bedrag veld als valuta
+# Bedrag veld
 bedrag = st.number_input(
     "Bedrag (€)",
     step=0.01,
@@ -97,38 +105,36 @@ transactietype = st.radio(
     key="transactietype"
 )
 
-# Opslaan functie
+# ----------------------
+# OPSLAAN FUNCTIE
+# ----------------------
 def opslaan():
     if not categorie:
         st.warning("Vul een categorie in.")
         return
     
-    # Pas bedrag aan op basis van type
+    # Negatief bij uitgave
     bedrag_final = bedrag * (-1 if transactietype == "Uitgave" else 1)
 
     nieuwe_rij = {
         "Datum": pd.to_datetime(datum),
         "Categorie": categorie,
         "Bedrag": bedrag_final,
-        "Omschrijving": omschrijving
+        "Omschrijving": omschrijving,
+        "Soort": type_last   # nieuwe kolomnaam
     }
+
     global df
     df = pd.concat([df, pd.DataFrame([nieuwe_rij])], ignore_index=True)
-    
-    # Schrijf terug naar Google Sheet
+
+    # Schrijf naar Google Sheet
     set_with_dataframe(sheet, df)
-    
-    st.success(f"Gegevens opgeslagen! Categorie '{categorie}' en omschrijving '{omschrijving}' toegevoegd indien nieuw.")
 
-    # Update dropdowns in huidige sessie
-    if categorie not in bestaande_categorieen:
-        bestaande_categorieen.append(categorie)
-        bestaande_categorieen.sort()
-    if omschrijving not in bestaande_omschrijving:
-        bestaande_omschrijving.append(omschrijving)
-        bestaande_omschrijving.sort()
+    st.success(
+        f"Gegevens opgeslagen! Categorie '{categorie}', omschrijving '{omschrijving}' en soort '{type_last}' toegevoegd."
+    )
 
-    # Reset velden na opslaan
+    # Reset sessie velden
     st.session_state.categorie_select = "Nieuwe categorie"
     st.session_state.categorie_nieuw = ""
     st.session_state.omschrijving_select = "Nieuwe omschrijving"
@@ -139,10 +145,12 @@ def opslaan():
 # Opslaan knop
 st.button("Opslaan", on_click=opslaan)
 
-# Overzicht van data
+# ----------------------
+# OVERZICHT
+# ----------------------
 st.subheader("Overzicht ingevoerde data")
 if df.empty:
     st.info("Er zijn nog geen gegevens ingevoerd.")
 else:
     df_sorted = df.sort_values(by="Datum", ascending=False)
-    st.dataframe(df_sorted)
+    st.dataframe(df_sorted, hide_index=True)  # geen index meer
