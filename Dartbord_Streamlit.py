@@ -273,6 +273,11 @@ if st.session_state.pagina == 2:
             st.subheader("📊 Totaal")
             st.markdown(f"**Totaal gegooide pijlen:** `{totaal}`")
 
+        # Vak-teller toevoegen
+        huidig_idx = st.session_state.index + 1  # +1 omdat index 0-based is
+        totaal_vakken = len(st.session_state.vakken)
+        st.markdown(f"**Vak {huidig_idx} van {totaal_vakken}:** {st.session_state.vakken[st.session_state.index]}")
+
 
         if "pijlen_data" not in st.session_state:
             st.session_state.pijlen_data = {}
