@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-from gspread_dataframe import get_as_dataframe, set_with_dataframe
 
 # ----------------------
 # CONFIGURATIE
@@ -11,93 +10,93 @@ SHEET_NAAM = "Boekhouding_Rick"
 TABBLAD_NAAM = "Blad1"
 SERVICE_ACCOUNT_INFO = st.secrets["gcp_service_account"]
 
-# Maak credentials
-scope = ["https://spreadsheets.google.com/feeds",
-         "https://www.googleapis.com/auth/drive"]
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
 creds = Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=scope)
 client = gspread.authorize(creds)
-
-# Open Google Sheet
 sheet = client.open(SHEET_NAAM).worksheet(TABBLAD_NAAM)
 
-# Laad bestaande data
-df = get_as_dataframe(sheet)
-if df is None or df.empty:
+# ----------------------
+# BESTAANDE DATA INLEZEN
+# ----------------------
+data = sheet.get_all_records()
+if not data:
     df = pd.DataFrame(columns=["Datum", "Categorie", "Bedrag", "Omschrijving", "Soort"])
 else:
-    df["Datum"] = pd.to_datetime(df["Datum"])
-    if "Omschrijving" not in df.columns:
-        df["Omschrijving"] = ""
-    if "Bedrag" not in df.columns:
-        df.rename(columns={"Waarde": "Bedrag"}, inplace=True)
-    if "Soort" not in df.columns:   # nieuwe kolomnaam
-        df["Soort"] = ""
+    df = pd.DataFrame(data)
+    # Zorg dat datum kolom strings in dd-mm-yyyy zijn
+    if "Datum" in df.columns:
+        df["Datum"] = pd.to_datetime(df["Datum"], errors='coerce').dt.strftime("%d-%m-%Y")
+    # Zorg dat alle kolommen aanwezig zijn
+    for col in ["Categorie", "Omschrijving", "Soort", "Bedrag"]:
+        if col not in df.columns:
+            if col == "Bedrag":
+                df[col] = 0.0
+            else:
+                df[col] = ""
 
 # ----------------------
 # SESSION STATE INIT
 # ----------------------
-if "categorie_select" not in st.session_state:
-    st.session_state["categorie_select"] = "Nieuwe categorie"
-if "categorie_nieuw" not in st.session_state:
-    st.session_state["categorie_nieuw"] = ""
-if "omschrijving_select" not in st.session_state:
-    st.session_state["omschrijving_select"] = "Nieuwe omschrijving"
-if "omschrijving_nieuw" not in st.session_state:
-    st.session_state["omschrijving_nieuw"] = ""
-if "bedrag" not in st.session_state:
-    st.session_state["bedrag"] = 0.0
-if "transactietype" not in st.session_state:
-    st.session_state["transactietype"] = "Uitgave"
+for key, default in {
+    "categorie_select": "Nieuwe categorie",
+    "categorie_nieuw": "",
+    "omschrijving_select": "Nieuwe omschrijving",
+    "omschrijving_nieuw": "",
+    "bedrag": 0.0,
+    "transactietype": "Uitgave"
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 # ----------------------
 # STREAMLIT UI
 # ----------------------
 st.title("Boekhouding")
 
-# Datum invoer
 datum = st.date_input("Datum")
 
-# NIEUW: Soort onder Datum
 type_last = st.radio(
     "Is dit een vaste last of een variabele transactie?",
     ["Vaste last", "Variabel"]
 )
 
-# Dropdown categorieën
-bestaande_categorieen = df["Categorie"].dropna().unique().tolist()
-bestaande_categorieen.sort()
+# Categorieën
+bestaande_categorieen = sorted(df["Categorie"].dropna().unique().tolist())
 categorie_select = st.selectbox(
     "Kies een categorie (of selecteer 'Nieuwe categorie')",
     ["Nieuwe categorie"] + bestaande_categorieen,
     key="categorie_select"
 )
-if st.session_state.categorie_select == "Nieuwe categorie":
+if categorie_select == "Nieuwe categorie":
     categorie = st.text_input("Nieuwe categorie invoeren", key="categorie_nieuw")
 else:
-    categorie = st.session_state.categorie_select
+    categorie = categorie_select
 
-# Dropdown omschrijving
-bestaande_omschrijving = df["Omschrijving"].dropna().unique().tolist()
-bestaande_omschrijving.sort()
+# Omschrijving
+bestaande_omschrijving = sorted(df["Omschrijving"].dropna().unique().tolist())
 omschrijving_select = st.selectbox(
     "Kies een omschrijving (of selecteer 'Nieuwe omschrijving')",
     ["Nieuwe omschrijving"] + bestaande_omschrijving,
-    key="Omschrijving_select"
+    key="omschrijving_select"
 )
-if st.session_state.get("Omschrijving_select") == "Nieuwe omschrijving":
+if omschrijving_select == "Nieuwe omschrijving":
     omschrijving = st.text_input("Nieuwe omschrijving invoeren", key="omschrijving_nieuw")
 else:
-    omschrijving = st.session_state.get("Omschrijving_select")
+    omschrijving = omschrijving_select
 
-# Bedrag veld
+# Bedrag
 bedrag = st.number_input(
     "Bedrag (€)",
+    min_value=0.0,
     step=0.01,
     format="%.2f",
     key="bedrag"
 )
 
-# Keuze tussen uitgave of inkomsten
+# Type transactie
 transactietype = st.radio(
     "Type transactie",
     ["Uitgave", "Inkomsten"],
@@ -112,29 +111,41 @@ def opslaan():
     if not categorie:
         st.warning("Vul een categorie in.")
         return
-    
-    # Negatief bij uitgave
-    bedrag_final = bedrag * (-1 if transactietype == "Uitgave" else 1)
 
-    nieuwe_rij = {
-        "Datum": pd.to_datetime(datum),
-        "Categorie": categorie,
-        "Bedrag": bedrag_final,
-        "Omschrijving": omschrijving,
-        "Soort": type_last   # nieuwe kolomnaam
-    }
+    # Correcte float en negatieve waarde bij uitgave
+    bedrag_final = float(bedrag)
+    if transactietype == "Uitgave":
+        bedrag_final *= -1
+    # Afronden op 2 decimalen
+    bedrag_final = round(bedrag_final, 2)
 
+    # Nieuwe rij als lijst, datum als string dd-mm-yyyy
+    nieuwe_rij = [
+        datum.strftime("%d-%m-%Y"),
+        categorie,
+        bedrag_final,
+        omschrijving,
+        type_last
+    ]
+
+    # Voeg nieuwe rij toe aan Google Sheet (append)
+    sheet.append_row(nieuwe_rij, value_input_option="USER_ENTERED")
+
+    # Voeg toe aan lokale DataFrame
     global df
-    df = pd.concat([df, pd.DataFrame([nieuwe_rij])], ignore_index=True)
-
-    # Schrijf naar Google Sheet
-    set_with_dataframe(sheet, df)
+    df = pd.concat([df, pd.DataFrame([{
+        "Datum": nieuwe_rij[0],
+        "Categorie": nieuwe_rij[1],
+        "Bedrag": nieuwe_rij[2],
+        "Omschrijving": nieuwe_rij[3],
+        "Soort": nieuwe_rij[4]
+    }])], ignore_index=True)
 
     st.success(
         f"Gegevens opgeslagen! Categorie '{categorie}', omschrijving '{omschrijving}' en soort '{type_last}' toegevoegd."
     )
 
-    # Reset sessie velden
+    # Reset sessievelden
     st.session_state.categorie_select = "Nieuwe categorie"
     st.session_state.categorie_nieuw = ""
     st.session_state.omschrijving_select = "Nieuwe omschrijving"
@@ -142,8 +153,53 @@ def opslaan():
     st.session_state.bedrag = 0.0
     st.session_state.transactietype = "Uitgave"
 
-# Opslaan knop
 st.button("Opslaan", on_click=opslaan)
+
+import re
+
+def europees_getal_naar_float(value):
+    """
+    Zet een waarde om naar float met Europese notatie:
+    - Als float/int: gewoon behouden
+    - Als string:
+        - Komma aanwezig: vervang door punt
+        - Geen komma: interpreteer als centen (laatste 2 cijfers decimaal)
+    """
+    import re
+
+    if value is None:
+        return 0.0
+
+    # Float/int behouden
+    if isinstance(value, (float, int)):
+        return float(value)
+
+    # Anders string
+    s = str(value).strip()
+    if s == "":
+        return 0.0
+
+    # Alleen cijfers, punt, komma
+    s = re.sub(r"[^\d,\.]", "", s)
+
+    if "," in s:
+        # Europese notatie, vervang komma door punt, verwijder duizendtallen
+        s = s.replace(".", "")
+        s = s.replace(",", ".")
+        try:
+            return float(s)
+        except:
+            return 0.0
+    else:
+        # Geen komma: interpreteer als centen als > 100
+        s_num = int(s)
+        if s_num < 100:
+            # minder dan 1 euro, bijv. "50" = 0,50
+            return s_num / 100
+        else:
+            # laatste twee cijfers decimaal
+            s = s.zfill(3)
+            return float(s[:-2] + "." + s[-2:])
 
 # ----------------------
 # OVERZICHT
@@ -152,5 +208,18 @@ st.subheader("Overzicht ingevoerde data")
 if df.empty:
     st.info("Er zijn nog geen gegevens ingevoerd.")
 else:
-    df_sorted = df.sort_values(by="Datum", ascending=False)
-    st.dataframe(df_sorted, hide_index=True)  # geen index meer
+    df_preview = df.copy()
+
+    # Datum als dd-mm-yyyy
+    if "Datum" in df_preview.columns:
+        df_preview["Datum"] = pd.to_datetime(df_preview["Datum"], errors='coerce').dt.strftime("%d-%m-%Y")
+
+    # Bedrag: altijd float, 2 decimalen, komma als decimaal
+    if "Bedrag" in df_preview.columns:
+        df_preview["Bedrag"] = df_preview["Bedrag"].astype(float)/100
+        df_preview["Bedrag"] = df_preview["Bedrag"].apply(lambda x: f"{x:.2f}".replace(".", ","))
+
+    # Sorteer op datum (nieuwste eerst)
+    df_sorted = df_preview.sort_values(by="Datum", ascending=False)
+
+    st.dataframe(df_sorted, hide_index=True)
