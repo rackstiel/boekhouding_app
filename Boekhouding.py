@@ -79,13 +79,25 @@ if categorie_select == "Nieuwe categorie":
 else:
     categorie = categorie_select
 
-# Omschrijving
-bestaande_omschrijving = sorted(df["Omschrijving"].dropna().unique().tolist())
+# Omschrijving (afhankelijk van categorie)
+if categorie_select != "Nieuwe categorie":
+    bestaande_omschrijving = (
+        df.loc[df["Categorie"] == categorie_select, "Omschrijving"]
+        .dropna()
+        .unique()
+        .tolist()
+    )
+else:
+    bestaande_omschrijving = df["Omschrijving"].dropna().unique().tolist()
+
+bestaande_omschrijving = sorted(bestaande_omschrijving)
+
 omschrijving_select = st.selectbox(
     "Kies een omschrijving (of selecteer 'Nieuwe omschrijving')",
     ["Nieuwe omschrijving"] + bestaande_omschrijving,
     key="omschrijving_select"
 )
+
 if omschrijving_select == "Nieuwe omschrijving":
     omschrijving = st.text_input("Nieuwe omschrijving invoeren", key="omschrijving_nieuw")
 else:
