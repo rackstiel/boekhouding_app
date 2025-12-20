@@ -28,7 +28,11 @@ else:
     df = pd.DataFrame(data)
     # Zorg dat datum kolom strings in dd-mm-yyyy zijn
     if "Datum" in df.columns:
-        df["Datum"] = pd.to_datetime(df["Datum"], errors='coerce').dt.strftime("%d-%m-%Y")
+        df["Datum"] = pd.to_datetime(
+            df["Datum"],
+            dayfirst=True,
+            errors='coerce'
+        )
     # Zorg dat alle kolommen aanwezig zijn
     for col in ["Categorie", "Omschrijving", "Soort", "Bedrag"]:
         if col not in df.columns:
@@ -212,7 +216,12 @@ else:
 
     # Datum als dd-mm-yyyy
     if "Datum" in df_preview.columns:
-        df_preview["Datum"] = pd.to_datetime(df_preview["Datum"], errors='coerce').dt.strftime("%d-%m-%Y")
+        df_preview["Datum"] = pd.to_datetime(
+            df_preview["Datum"],
+            dayfirst=True,
+            errors='coerce'
+        ).dt.strftime("%d-%m-%Y")
+
 
     # Bedrag: altijd float, 2 decimalen, komma als decimaal
     if "Bedrag" in df_preview.columns:
